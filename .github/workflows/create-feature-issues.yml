@@ -1,0 +1,71 @@
+name: Create Feature Issues
+
+on:
+  push:
+    paths:
+      - '.github/new-feature-issues/**'
+    branches:
+      - main
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  create_feature_issues:
+    name: Create Feature Issues from Markdown
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create issues from markdown files
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            async function createIssuesFromMarkdownFiles(dir, label) {
+              if (!fs.existsSync(dir)) {
+                console.log(`Directory ${dir} does not exist, skipping.`);
+                return;
+              }
+
+              const files = fs.readdirSync(dir).filter(f => f.endsWith('.md'));
+              console.log(`Creating ${files.length} issues with '${label}' label from '${dir}' folder.`);
+
+              for (const file of files) {
+                const fullPath = path.join(dir, file);
+                const fileContent = fs.readFileSync(fullPath, 'utf8');
+
+                // Extract title (first H1)
+                const titleMatch = fileContent.match(/^#\s+(.+)$/m);
+                const title = titleMatch ? titleMatch[1].trim() : file.replace('.md', '');
+
+                // Use entire content as body
+                const body = fileContent;
+
+                try {
+                  const issue = await github.rest.issues.create({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    title: title,
+                    body: body,
+                    labels: [label],
+                  });
+
+                  console.log(`Created issue: ${title} (#${issue.data.number})`);
+                } catch (error) {
+                  console.error(`Failed to create issue from ${file}: ${error.message}`);
+                }
+              }
+            }
+
+            // Create issues from all priority levels
+            await createIssuesFromMarkdownFiles('.github/new-feature-issues/high-priority', 'enhancement');
+            await createIssuesFromMarkdownFiles('.github/new-feature-issues/medium-priority', 'enhancement');
+            await createIssuesFromMarkdownFiles('.github/new-feature-issues/low-priority', 'enhancement');
+
+            console.log('Finished creating feature issues.');
